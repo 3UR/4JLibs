@@ -174,7 +174,7 @@
     <ClInclude Include="VS_Compressed.h" />
     <ClInclude Include="VS_PF3_TF2_CB4_NB4_XW1.h" />
     <ClInclude Include="VS_PF3_TF2_CB4_NB4_XW1_Lighting.h" />
-    <ClInclude Include="VS_PF3_TF2_CB4_NB4_XW1_TexGen.h" />
+    <ClInclude Include="VS_PF3_TF2_CB4_NB4_XW1_Texgen.h" />
     <ClInclude Include="VS_ScreenClear.h" />
     <ClInclude Include="VS_ScreenSpace.h" />
     <ClInclude Include="zlib\zconf.h" />

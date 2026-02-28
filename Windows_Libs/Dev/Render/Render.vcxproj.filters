@@ -72,7 +72,7 @@
     <ClInclude Include="VS_PF3_TF2_CB4_NB4_XW1_Lighting.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VS_PF3_TF2_CB4_NB4_XW1_TexGen.h">
+    <ClInclude Include="VS_PF3_TF2_CB4_NB4_XW1_Texgen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VS_Compressed.h">
