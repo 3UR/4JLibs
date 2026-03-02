@@ -2,6 +2,8 @@
 #include "4J_Render.h"
 #include "Renderer.h"
 
+C4JRender RenderManager;
+
 void C4JRender::Tick()
 {
 #if _DEBUG
@@ -477,5 +479,3 @@ void C4JRender::Resume()
 {
 	InternalRenderManager.Resume();
 }
-
-C4JRender RenderManager;
