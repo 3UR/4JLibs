@@ -5,6 +5,7 @@
 #include <vector>
 
 #define MAX_MIP_LEVELS 5
+#define MAX_TEXTURES 512
 
 class Renderer
 {
@@ -314,6 +315,7 @@ public:
 	struct Context
 	{
 		Context(ID3D11Device* device, ID3D11DeviceContext* deviceContext);
+
 		ID3D11DeviceContext* m_pDeviceContext;
 		ID3DUserDefinedAnnotation* userAnnotation;
 		DWORD contextStateFlags;
@@ -423,7 +425,7 @@ public:
 	C4JRender::eViewportType m_ViewportType;
 	BYTE reservedRendererByte0;
 	BYTE paddingAfterViewportType[3];
-	Renderer::Texture m_textures[512];
+	Renderer::Texture m_textures[MAX_TEXTURES];
 	DWORD backBufferWidth;
 	DWORD backBufferHeight;
 	BYTE reservedRendererByte1;
@@ -441,8 +443,8 @@ public:
 	std::unordered_map<int, ID3D11DepthStencilState*> managedDepthStencilStates;
 	std::unordered_map<int, ID3D11SamplerState*> managedSamplerStates;
 	std::unordered_map<int, ID3D11RasterizerState*> managedRasterizerStates;
-	BYTE shouldScreenGrabNextFrame;
-	BYTE suspended;
+	bool m_bShouldScreenGrabNextFrame;
+	BYTE m_bSuspended;
 	BYTE paddingAfterSuspendState[2];
 };
 

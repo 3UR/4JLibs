@@ -316,7 +316,7 @@ void Renderer::ConvertLinearToPng(ImageFileBuffer *pngOut,
   pngOut->m_bufferSize = outputLength;
 }
 
-void Renderer::DoScreenGrabOnNextPresent() { shouldScreenGrabNextFrame = 1; }
+void Renderer::DoScreenGrabOnNextPresent() { m_bShouldScreenGrabNextFrame = 1; }
 
 void Renderer::EndConditionalRendering() {}
 
@@ -371,8 +371,8 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain) {
   }
   reservedRendererDword3 = 0;
 
-  shouldScreenGrabNextFrame = 0;
-  suspended = 0;
+  m_bShouldScreenGrabNextFrame = 0;
+  m_bSuspended = 0;
 
   this->SetupShaders();
   const float clearColour[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -522,7 +522,7 @@ bool Renderer::IsHiDef() { return true; }
 bool Renderer::IsWidescreen() { return true; }
 
 void Renderer::Present() {
-  if (shouldScreenGrabNextFrame) {
+  if (m_bShouldScreenGrabNextFrame) {
     int *linearData = new int[kScreenGrabWidth * kScreenGrabHeight];
     ID3D11Texture2D *backBuffer = nullptr;
     ID3D11Texture2D *stagingTexture = nullptr;
@@ -575,14 +575,14 @@ void Renderer::Present() {
       backBuffer->Release();
       backBuffer = nullptr;
     }
-    shouldScreenGrabNextFrame = 0;
+    m_bShouldScreenGrabNextFrame = 0;
   }
 
   m_pSwapChain->Present(1, 0);
   ++presentCount;
 }
 
-void Renderer::Resume() { suspended = 0; }
+void Renderer::Resume() { m_bSuspended = 0; }
 
 void Renderer::SetClearColour(const float colourRGBA[4]) {
   std::memcpy(m_fClearColor, colourRGBA, sizeof(m_fClearColor));
@@ -710,9 +710,9 @@ void Renderer::StartFrame() {
                                                depthStencilView);
 }
 
-void Renderer::Suspend() { suspended = 1; }
+void Renderer::Suspend() { m_bSuspended = 1; }
 
-bool Renderer::Suspended() { return suspended != 0; }
+bool Renderer::Suspended() { return m_bSuspended != 0; }
 
 void Renderer::UpdateGamma(unsigned short) {}
 
