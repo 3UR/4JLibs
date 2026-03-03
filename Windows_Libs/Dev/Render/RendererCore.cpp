@@ -270,7 +270,6 @@ void Renderer::Clear(int flags, D3D11_RECT *)
     blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
     blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
     blendDesc.RenderTarget[0].RenderTargetWriteMask = (flags & CLEAR_COLOUR_FLAG) ? D3D11_COLOR_WRITE_ENABLE_ALL : 0;
-    m_pDevice->CreateBlendState(&blendDesc, &blendState);
 
     PROFILER_SCOPE("Renderer::Clear", "Depth", MP_MAGENTA)
     D3D11_DEPTH_STENCIL_DESC depthDesc = {};
@@ -288,51 +287,52 @@ void Renderer::Clear(int flags, D3D11_RECT *)
     depthDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
     depthDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
     depthDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
-    m_pDevice->CreateDepthStencilState(&depthDesc, &depthState);
 
     PROFILER_SCOPE("Renderer::Clear", "Rasterizer", MP_MAGENTA)
     D3D11_RASTERIZER_DESC rasterDesc = {};
     rasterDesc.FillMode = D3D11_FILL_SOLID;
     rasterDesc.CullMode = D3D11_CULL_NONE;
+    rasterDesc.FrontCounterClockwise = true;
+    rasterDesc.DepthBias = 0;
+    rasterDesc.DepthBiasClamp = 0.f;
+    rasterDesc.SlopeScaledDepthBias = 0.f;
     rasterDesc.DepthClipEnable = true;
-    rasterDesc.MultisampleEnable = true;
-    m_pDevice->CreateRasterizerState(&rasterDesc, &rasterizerState);
+    rasterDesc.ScissorEnable = false;
+    rasterDesc.MultisampleEnable = false;
+    rasterDesc.AntialiasedLineEnable = false;
 
     PROFILER_SCOPE("Renderer::Clear", "DrawClearQuad", MP_MAGENTA)
-    c.m_pDeviceContext->VSSetShader(screenClearVertexShader, NULL, 0);
-    c.m_pDeviceContext->IASetInputLayout(NULL);
-    c.m_pDeviceContext->PSSetShader(screenClearPixelShader, NULL, 0);
-    c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
-    c.m_pDeviceContext->OMSetBlendState(blendState, NULL, 0xFFFFFFFF);
-    c.m_pDeviceContext->OMSetDepthStencilState(depthState, 0);
-    c.m_pDeviceContext->RSSetState(rasterizerState);
-    c.m_pDeviceContext->PSSetShaderResources(0, 0, NULL);
-    c.m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-    c.m_pDeviceContext->Draw(4, 0);
+    this->m_pDevice->CreateBlendState(&blendDesc, &blendState);
+    this->m_pDeviceContext->OMSetBlendState(blendState, 0, 0xFFFFFFFF);
+    blendState->Release();
 
-    if (blendState)
-    {
-        blendState->Release();
-        blendState = NULL;
-    }
-    if (depthState)
-    {
-        depthState->Release();
-        depthState = NULL;
-    }
-    if (rasterizerState)
-    {
-        rasterizerState->Release();
-        rasterizerState = NULL;
-    }
+    this->m_pDevice->CreateDepthStencilState(&depthDesc, &depthState);
+    this->m_pDeviceContext->OMSetDepthStencilState(depthState, 0);
+    depthState->Release();
 
-    c.m_pDeviceContext->OMSetBlendState(GetManagedBlendState(), c.blendFactor, 0xFFFFFFFF);
-    c.m_pDeviceContext->OMSetDepthStencilState(GetManagedDepthStencilState(), 0);
-    c.m_pDeviceContext->RSSetState(GetManagedRasterizerState());
-    c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
-   
-    activeVertexType = -1;
-    activePixelType = -1;
+    this->m_pDevice->CreateRasterizerState(&rasterDesc, &rasterizerState);
+    this->m_pDeviceContext->RSSetState(rasterizerState);
+    rasterizerState->Release();
+
+    c.m_pDeviceContext->IASetVertexBuffers(0, 0, 0, 0, 0);
+
+    this->m_pDeviceContext->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    this->m_pDeviceContext->Draw(4u, 0);
+
+    this->m_pDevice->CreateBlendState(&c.blendDesc, &blendState);
+    this->m_pDeviceContext->OMSetBlendState(blendState, 0, 0xFFFFFFFF);
+    blendState->Release();
+
+    this->m_pDevice->CreateDepthStencilState(&c.depthStencilDesc, &depthState);
+    this->m_pDeviceContext->OMSetDepthStencilState(depthState, 0);
+    depthState->Release();
+
+    this->m_pDevice->CreateRasterizerState(&c.rasterizerDesc, &rasterizerState);
+    this->m_pDeviceContext->RSSetState(rasterizerState);
+    rasterizerState->Release();
+
+    this->activePixelType = -1;
+    this->activeVertexType = -1;
 }
 
 void Renderer::ConvertLinearToPng(ImageFileBuffer *pngOut, unsigned char *linearData, unsigned int width, unsigned int height)

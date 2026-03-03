@@ -40,8 +40,7 @@ void Renderer::DrawVertexBuffer(C4JRender::ePrimitiveType PrimitiveType, int cou
     StateUpdate();
 
     const UINT stride = vertexStrideTable[vType];
-    const UINT offset = 0;
-    d3d11->IASetVertexBuffers(0, 1, &buffer, &stride, &offset);
+    d3d11->IASetVertexBuffers(0, 1, &buffer, &stride, nullptr);
 
     if (indexed)
         d3d11->DrawIndexed(drawCount, 0, 0);
@@ -158,28 +157,27 @@ void Renderer::DrawVertices(C4JRender::ePrimitiveType PrimitiveType, int count, 
 
     assert(vertexBytes <= Context::VERTEX_BUFFER_SIZE);
 
-    UINT vertexOffset = c.dynamicVertexOffset;
-    if (vertexOffset + vertexBytes > Context::VERTEX_BUFFER_SIZE)
-        vertexOffset = 0;
+    if (c.dynamicVertexOffset + vertexBytes > Context::VERTEX_BUFFER_SIZE)
+        c.dynamicVertexOffset = 0;
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    const D3D11_MAP mapType = vertexOffset == 0 ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
+    const D3D11_MAP mapType = c.dynamicVertexOffset == 0 ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
     const HRESULT hr = d3d11->Map(c.dynamicVertexBuffer, 0, mapType, 0, &mapped);
     if (FAILED(hr))
         printf("ERROR: 0x%x\n", static_cast<unsigned int>(hr));
 
-    memcpy(reinterpret_cast<std::uint8_t *>(mapped.pData) + vertexOffset, vertices, vertexBytes);
+    memmove(reinterpret_cast<std::uint8_t *>(mapped.pData) + c.dynamicVertexOffset, vertices, vertexBytes);
     d3d11->Unmap(c.dynamicVertexBuffer, 0);
 
     StateUpdate();
 
     ID3D11Buffer *dynamicBuffer = c.dynamicVertexBuffer;
-    d3d11->IASetVertexBuffers(0, 1, &dynamicBuffer, &stride, &vertexOffset);
+    d3d11->IASetVertexBuffers(0, 1, &dynamicBuffer, &stride, reinterpret_cast<UINT *>(&c.dynamicVertexOffset));
 
     if (indexed)
         d3d11->DrawIndexed(drawCount, 0, 0);
     else
         d3d11->Draw(count, 0);
 
-    c.dynamicVertexOffset = vertexOffset + vertexBytes;
+    c.dynamicVertexOffset += vertexBytes;
 }
