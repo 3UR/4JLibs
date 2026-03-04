@@ -25,6 +25,7 @@ SOFTWARE.
 
 #include "4J_Render.h"
 #include "Profiler.h"
+
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -46,8 +47,8 @@ SOFTWARE.
 class Renderer
 {
 public:
-    struct Context;
-    struct CommandBuffer;
+    class Context;
+    class CommandBuffer;
 
     void UpdateGamma(unsigned short usGamma);
     void MatrixMode(int type);
@@ -201,8 +202,9 @@ public:
         COMMAND_SET_FACE_CULL,
     };
 
-    struct CommandBuffer
+    class CommandBuffer
     {
+    public:
         CommandBuffer(bool full);
         ~CommandBuffer();
         void StartRecording();
@@ -342,8 +344,9 @@ public:
         DirectX::XMMATRIX m_matrix;
     };
 
-    struct Context
+    class Context
     {
+    public:
         static const unsigned int VERTEX_BUFFER_SIZE = 0x100000;
 
         Context(ID3D11Device *device, ID3D11DeviceContext *deviceContext);
