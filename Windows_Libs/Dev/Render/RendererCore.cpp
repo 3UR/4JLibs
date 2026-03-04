@@ -415,7 +415,7 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     rasterizerState->Release();
 
     // @Patoke add: just to make sure, set the render target shader resource to null to avoid any potential read/write hazards
-    ID3D11ShaderResourceView *nullSRV[1] = {nullptr};
+    ID3D11ShaderResourceView *nullSRV[1] = {NULL};
     c.m_pDeviceContext->PSSetShaderResources(0, 1, nullSRV);
 
     for (UINT i = 0; i < MAX_MIP_LEVELS - 1; ++i)
