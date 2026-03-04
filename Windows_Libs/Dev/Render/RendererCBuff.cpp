@@ -28,6 +28,7 @@ SOFTWARE.
 #include <cstdint>
 #include <cstring>
 #include <new>
+#include <utility>
 
 Renderer::CommandBuffer::CommandBuffer(bool full)
     : m_vertexBuffer(NULL)
@@ -57,7 +58,7 @@ Renderer::CommandBuffer::~CommandBuffer()
 
 void Renderer::CommandBuffer::AddMatrix(const float *matrix)
 {
-    Command command = {};
+    Command command;
     command.m_command_type = COMMAND_ADD_MATRIX;
     std::memcpy(command.add_matrix.m_matrix, matrix, sizeof(command.add_matrix.m_matrix));
     m_commands.push_back(command);
@@ -76,7 +77,7 @@ void Renderer::CommandBuffer::AddVertices(unsigned int stride, unsigned int coun
     const std::uint64_t vertexOffset = m_vertexDataLength;
     const std::uint64_t copySize = std::uint64_t(stride) * std::uint64_t(count);
 
-    Command command = {};
+    Command command;
     command.m_command_type = COMMAND_ADD_VERTICES;
     command.add_vertices.m_vertex_index_start = static_cast<unsigned int>(vertexOffset);
     command.add_vertices.m_vertex_count = count;
@@ -103,9 +104,9 @@ void Renderer::CommandBuffer::AddVertices(unsigned int stride, unsigned int coun
 
 void Renderer::CommandBuffer::BindTexture(int idx)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_BIND_TEXTURE;
+    Command command;
     command.bind_texture.m_texture_index = idx;
+    command.m_command_type = COMMAND_BIND_TEXTURE;
     m_commands.push_back(command);
 }
 
@@ -228,14 +229,11 @@ int Renderer::CBuffCreate(int count)
     int first = reservedRendererDword1;
     if (first < NUM_COMMAND_HANDLES)
     {
-        int probe = first;
+        int cursor = first;
         int end = first + count;
-        while (true)
+        while (first < NUM_COMMAND_HANDLES)
         {
-            assert(first < NUM_COMMAND_HANDLES);
-
-            int cursor = probe;
-            while (cursor < end && cursor < NUM_COMMAND_HANDLES && m_commandHandleToIndex[cursor] == static_cast<std::int16_t>(-1))
+            while (cursor < end && m_commandHandleToIndex[cursor] == static_cast<std::int16_t>(-1))
             {
                 ++cursor;
             }
@@ -244,9 +242,16 @@ int Renderer::CBuffCreate(int count)
                 break;
 
             ++first;
-            ++probe;
             ++end;
-            if (first >= NUM_COMMAND_HANDLES || end > NUM_COMMAND_HANDLES)
+            ++cursor;
+
+            if (first >= NUM_COMMAND_HANDLES)
+            {
+                first = -1;
+                break;
+            }
+
+            if (end > NUM_COMMAND_HANDLES)
             {
                 first = -1;
                 break;
@@ -255,12 +260,12 @@ int Renderer::CBuffCreate(int count)
 
         if (first >= 0)
         {
-            const int allocationEnd = first + count;
-            for (int i = first; i < allocationEnd; ++i)
+            end = first + count;
+            for (int i = first; i < end; ++i)
                 m_commandHandleToIndex[i] = static_cast<std::int16_t>(-2);
 
             if (reservedRendererByte1)
-                reservedRendererDword1 = allocationEnd;
+                reservedRendererDword1 = end;
         }
     }
     else
@@ -337,17 +342,7 @@ void Renderer::CBuffEnd()
 
     EnterCriticalSection(&m_commandBufferCS);
 
-    if (c.deferredModeEnabled)
-    {
-        Renderer::DeferredCBuff deferred;
-        deferred.m_command_buf = c.commandBuffer;
-        deferred.m_vertex_index = c.recordingBufferIndex;
-        deferred.m_vertex_type = c.recordingVertexType;
-        deferred.m_primitive_type = c.recordingPrimitiveType;
-        deferred.m_matrix = c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][0];
-        c.deferredBuffers.push_back(deferred);
-    }
-    else
+    if (!c.deferredModeEnabled)
     {
         const int existingIndex = m_commandHandleToIndex[c.recordingBufferIndex];
         if (existingIndex >= 0)
@@ -366,6 +361,17 @@ void Renderer::CBuffEnd()
         m_commandBuffers[internalSlot] = c.commandBuffer;
         m_commandMatrices[internalSlot] = c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][0];
     }
+    else
+    {
+        Renderer::DeferredCBuff deferred = {
+            c.commandBuffer,
+            static_cast<int>(c.recordingBufferIndex),
+            static_cast<int>(c.recordingVertexType),
+            static_cast<int>(c.recordingPrimitiveType),
+            c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][0]
+        };
+        c.deferredBuffers.push_back(std::move(deferred));
+    }
 
     c.stackType = MATRIX_MODE_MODELVIEW;
     c.commandBuffer->EndRecording(m_pDevice);
@@ -382,13 +388,18 @@ void Renderer::CBuffLockStaticCreations()
 int Renderer::CBuffSize(int index)
 {
     if (index == -1)
-        return totalAlloc < 0 ? 0 : totalAlloc;
+    {
+        int size = totalAlloc;
+        if (size < 0)
+            size = 0;
+        return size;
+    }
 
-    unsigned int size = 0;
+    int size = 0;
     EnterCriticalSection(&m_commandBufferCS);
     const int commandIndex = m_commandHandleToIndex[index];
     if (commandIndex >= 0)
-        size = static_cast<unsigned int>(m_commandBuffers[commandIndex]->GetAllocated());
+        size = static_cast<int>(m_commandBuffers[commandIndex]->m_allocated);
     LeaveCriticalSection(&m_commandBufferCS);
     return size;
 }
@@ -396,8 +407,8 @@ int Renderer::CBuffSize(int index)
 void Renderer::CBuffStart(int index, bool full)
 {
     Renderer::Context &c = getContext();
-    c.commandBuffer = new (std::nothrow) Renderer::CommandBuffer(full);
     c.recordingBufferIndex = index;
+    c.commandBuffer = new Renderer::CommandBuffer(full);
 
     assert(c.stackType == MATRIX_MODE_MODELVIEW);
 
@@ -412,7 +423,7 @@ void Renderer::CBuffTick()
     EnterCriticalSection(&m_commandBufferCS);
 
     int completedDeletes = 0;
-    if (reservedRendererDword3 > 0)
+    if (static_cast<int>(reservedRendererDword3) > 0)
     {
         int tailSlot = MAX_COMMAND_BUFFERS - 1;
         do
@@ -422,14 +433,15 @@ void Renderer::CBuffTick()
                 delete buffer;
             m_commandBuffers[tailSlot] = NULL;
 
-            if (--reservedRendererDword3 == 0)
+            if (--reservedRendererDword3 != 0)
             {
-                ++completedDeletes;
-                --tailSlot;
+                const int movedIndex = MAX_COMMAND_BUFFERS - 1 - static_cast<int>(reservedRendererDword3);
+                m_commandBuffers[tailSlot] = m_commandBuffers[movedIndex];
             }
             else
             {
-                m_commandBuffers[tailSlot] = m_commandBuffers[(MAX_COMMAND_BUFFERS - 1) - static_cast<int>(reservedRendererDword3)];
+                ++completedDeletes;
+                --tailSlot;
             }
         } while (completedDeletes < static_cast<int>(reservedRendererDword3));
     }
@@ -447,14 +459,15 @@ void Renderer::DeleteInternalBuffer(int index)
     m_commandBuffers[recycledSlot] = m_commandBuffers[index];
     m_commandMatrices[recycledSlot] = m_commandMatrices[index];
 
-    if (reservedRendererDword2-- != 1)
+    --reservedRendererDword2;
+    if (reservedRendererDword2 != 0)
     {
         const int lastActive = reservedRendererDword2;
 
         m_commandBuffers[index] = m_commandBuffers[lastActive];
         m_commandMatrices[index] = m_commandMatrices[lastActive];
-        m_commandVertexTypes[index] = m_commandVertexTypes[lastActive];
         m_commandPrimitiveTypes[index] = m_commandPrimitiveTypes[lastActive];
+        m_commandVertexTypes[index] = m_commandVertexTypes[lastActive];
 
         const int commandIndex = m_commandIndexToHandle[lastActive];
         m_commandHandleToIndex[commandIndex] = static_cast<std::int16_t>(index);
@@ -468,13 +481,18 @@ void Renderer::CommandBuffer::EndRecording(ID3D11Device *device)
 {
     if (m_vertexDataLength != 0)
     {
-        D3D11_BUFFER_DESC desc = {};
+        D3D11_BUFFER_DESC desc;
         desc.ByteWidth = static_cast<UINT>(m_vertexDataLength);
         desc.Usage = D3D11_USAGE_IMMUTABLE;
         desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        desc.CPUAccessFlags = 0;
+        desc.MiscFlags = 0;
+        desc.StructureByteStride = 0;
 
-        D3D11_SUBRESOURCE_DATA data = {};
+        D3D11_SUBRESOURCE_DATA data;
         data.pSysMem = m_vertexData;
+        data.SysMemPitch = 0;
+        data.SysMemSlicePitch = 0;
         device->CreateBuffer(&desc, &data, &m_vertexBuffer);
     }
 
@@ -503,8 +521,9 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vType, Renderer::Con
     int shaderVertexType = drawVertexType;
     bool matrixOverride = false;
 
-    for (const Command &command : m_commands)
+    for (std::vector<Renderer::CommandBuffer::Command>::const_iterator it = m_commands.begin(); it != m_commands.end(); ++it)
     {
+        const Command &command = *it;
         PROFILER_SCOPE("Renderer::CommandBuffer::Render", "ProcessCommand", MP_ORANGE);
 
         switch (command.m_command_type)
@@ -628,7 +647,7 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vType, Renderer::Con
         case COMMAND_SET_LIGHT_ENABLE:
         {
             const int light = command.set_light_enable.m_light_index;
-            if (light >= 0 && light < 2)
+            if (static_cast<unsigned int>(light) < 2u)
             {
                 c.lightEnabled[light] = command.set_light_enable.m_enable;
                 c.lightingDirty = true;
@@ -638,7 +657,7 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vType, Renderer::Con
         case COMMAND_SET_LIGHT_DIRECTION:
         {
             const int light = command.set_light_direction.m_light_index;
-            if (light >= 0 && light < 2)
+            if (static_cast<unsigned int>(light) < 2u)
             {
                 c.lightDirection[light].x = command.set_light_direction.m_direction[0];
                 c.lightDirection[light].y = command.set_light_direction.m_direction[1];
@@ -651,7 +670,7 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vType, Renderer::Con
         case COMMAND_SET_LIGHT_COLOUR:
         {
             const int light = command.set_light_colour.m_light_index;
-            if (light >= 0 && light < 2)
+            if (static_cast<unsigned int>(light) < 2u)
             {
                 c.lightColour[light].x = command.set_light_colour.m_color[0];
                 c.lightColour[light].y = command.set_light_colour.m_color[1];
@@ -716,95 +735,99 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vType, Renderer::Con
 
 void Renderer::CommandBuffer::SetBlendEnable(bool enable)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_BLEND_ENABLE;
+    Command command;
     command.set_blend_enable.m_enable = enable;
+    command.m_command_type = COMMAND_SET_BLEND_ENABLE;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetBlendFactor(unsigned int factor)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_BLEND_FACTOR;
+    Command command;
     command.set_blend_factor.m_blend_factor = factor;
+    command.m_command_type = COMMAND_SET_BLEND_FACTOR;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetBlendFunc(int src, int dst)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_BLEND_FUNC;
+    Command command;
     command.set_blend_func.m_src = src;
+    command.m_command_type = COMMAND_SET_BLEND_FUNC;
     command.set_blend_func.m_dst = dst;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetColor(float r, float g, float b, float a)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_COLOR;
+    Command command;
     command.set_color.m_color[0] = r;
     command.set_color.m_color[1] = g;
     command.set_color.m_color[2] = b;
+    command.m_command_type = COMMAND_SET_COLOR;
     command.set_color.m_color[3] = a;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetDepthFunc(int func)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_DEPTH_FUNC;
+    Command command;
     command.set_depth_func.m_depth_func = func;
+    command.m_command_type = COMMAND_SET_DEPTH_FUNC;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetDepthMask(bool enable)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_DEPTH_MASK;
+    Command command;
     command.set_depth_mask.m_enable = enable;
+    command.m_command_type = COMMAND_SET_DEPTH_MASK;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetDepthTestEnable(bool enable)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_DEPTH_TEST;
+    Command command;
     command.set_depth_test.m_enable = enable;
+    command.m_command_type = COMMAND_SET_DEPTH_TEST;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetFaceCull(bool enable)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_FACE_CULL;
+    Command command;
     command.set_face_cull.m_enable = enable;
+    command.m_command_type = COMMAND_SET_FACE_CULL;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetLightAmbientColour(float r, float g, float b)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_LIGHT_AMBIENT_COLOUR;
+    Command command;
     command.set_light_ambient_colour.m_color[0] = r;
     command.set_light_ambient_colour.m_color[1] = g;
     command.set_light_ambient_colour.m_color[2] = b;
+    command.m_command_type = COMMAND_SET_LIGHT_AMBIENT_COLOUR;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetLightColour(int light, float r, float g, float b)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_LIGHT_COLOUR;
+    Command command;
     command.set_light_colour.m_light_index = light;
     command.set_light_colour.m_color[0] = r;
     command.set_light_colour.m_color[1] = g;
+    command.m_command_type = COMMAND_SET_LIGHT_COLOUR;
     command.set_light_colour.m_color[2] = b;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetLightDirection(int light, float x, float y, float z)
 {
+    Command command;
+    command.m_command_type = COMMAND_SET_LIGHT_DIRECTION;
+    command.set_light_direction.m_light_index = light;
+
     Renderer::Context &c = InternalRenderManager.getContext();
     const std::uint32_t depth = c.stackPos[MATRIX_MODE_MODELVIEW_CBUFF];
     const DirectX::XMMATRIX &matrix = c.matrixStacks[MATRIX_MODE_MODELVIEW_CBUFF][depth];
@@ -813,32 +836,24 @@ void Renderer::CommandBuffer::SetLightDirection(int light, float x, float y, flo
     direction = DirectX::XMVector3TransformNormal(direction, matrix);
     direction = DirectX::XMVector3Normalize(direction);
 
-    Command command = {};
-    command.m_command_type = COMMAND_SET_LIGHT_DIRECTION;
-    command.set_light_direction.m_light_index = light;
-    DirectX::XMFLOAT4 outDirection;
-    DirectX::XMStoreFloat4(&outDirection, direction);
-    command.set_light_direction.m_direction[0] = outDirection.x;
-    command.set_light_direction.m_direction[1] = outDirection.y;
-    command.set_light_direction.m_direction[2] = outDirection.z;
-    command.set_light_direction.m_direction[3] = outDirection.w;
+    DirectX::XMStoreFloat4(reinterpret_cast<DirectX::XMFLOAT4 *>(command.set_light_direction.m_direction), direction);
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetLightEnable(int light, bool enable)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_LIGHT_ENABLE;
+    Command command;
     command.set_light_enable.m_light_index = light;
+    command.m_command_type = COMMAND_SET_LIGHT_ENABLE;
     command.set_light_enable.m_enable = enable;
     m_commands.push_back(command);
 }
 
 void Renderer::CommandBuffer::SetLightingEnable(bool enable)
 {
-    Command command = {};
-    command.m_command_type = COMMAND_SET_LIGHTING_ENABLE;
+    Command command;
     command.set_lighting_enable.m_enable = enable;
+    command.m_command_type = COMMAND_SET_LIGHTING_ENABLE;
     m_commands.push_back(command);
 }
 
