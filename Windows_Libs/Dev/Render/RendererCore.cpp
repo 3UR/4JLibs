@@ -389,9 +389,14 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     D3D11_RASTERIZER_DESC rasterDesc = {};
     rasterDesc.FillMode = D3D11_FILL_SOLID;
     rasterDesc.CullMode = D3D11_CULL_NONE;
+    rasterDesc.FrontCounterClockwise = true;
+    rasterDesc.DepthBias = 0;
+    rasterDesc.DepthBiasClamp = 0.f;
+    rasterDesc.SlopeScaledDepthBias = 0.f;
     rasterDesc.DepthClipEnable = true;
-    rasterDesc.MultisampleEnable = true;
-    m_pDevice->CreateRasterizerState(&rasterDesc, &rasterizerState);
+    rasterDesc.ScissorEnable = false;
+    rasterDesc.MultisampleEnable = false;
+    rasterDesc.AntialiasedLineEnable = false;
 
     D3D11_SAMPLER_DESC samplerDesc = {};
     samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;

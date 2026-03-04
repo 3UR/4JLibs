@@ -575,18 +575,14 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vType, Renderer::Con
             {
                 InternalRenderManager.UpdateLightingState();
 
-                if (drawVertexType == C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1)
+                if (drawVertexType != C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1 || !c.lightingEnabled)
                 {
-                    if (c.lightingEnabled)
-                    {
-                        drawVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT;
-                        shaderVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT;
-                    }
+                    if (drawVertexType == C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT && !c.lightingEnabled)
+                        drawVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1;
                 }
-                else if (drawVertexType == C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT && !c.lightingEnabled)
+                else
                 {
-                    drawVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1;
-                    shaderVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1;
+                    drawVertexType = C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT;
                 }
 
                 if (static_cast<DWORD>(drawVertexType) != InternalRenderManager.activeVertexType)
