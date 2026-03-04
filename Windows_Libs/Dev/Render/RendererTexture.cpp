@@ -43,7 +43,7 @@ HRESULT Renderer::LoadTextureData(BYTE* pbData, DWORD dwBytes, D3DXIMAGE_INFO* p
 {
     PROFILER_SCOPE("Renderer::LoadTextureData_Memory", "LoadTextureData_Memory", MP_PURPLE4);
     png_image image;
-    memset(&image, 0, sizeof(image));
+    std::memset(&image, 0, sizeof(image));
     image.version = PNG_IMAGE_VERSION;
 
     png_image_begin_read_from_memory(&image, pbData, dwBytes);
@@ -66,7 +66,7 @@ HRESULT Renderer::LoadTextureData(const char* szFilename, D3DXIMAGE_INFO* pSrcIn
 {
     PROFILER_SCOPE("Renderer::LoadTextureData_File", "LoadTextureData_File", MP_PURPLE4);
     png_image image;
-    memset(&image, 0, sizeof(image));
+    std::memset(&image, 0, sizeof(image));
     image.version = PNG_IMAGE_VERSION;
 
     png_image_begin_read_from_file(&image, szFilename);
@@ -89,7 +89,7 @@ HRESULT Renderer::SaveTextureData(const char* szFilename, D3DXIMAGE_INFO* pSrcIn
 {
     PROFILER_SCOPE("Renderer::SaveTextureData", "SaveTextureData", MP_PURPLE4);
     png_image image;
-    memset(&image, 0, sizeof(image));
+    std::memset(&image, 0, sizeof(image));
 
     image.opaque = NULL;
     image.colormap_entries = 0;
@@ -106,19 +106,19 @@ HRESULT Renderer::SaveTextureDataToMemory(void* pOutput, int outputCapacity, int
 {
     PROFILER_SCOPE("Renderer::SaveTextureDataToMemory", "SaveTextureDataToMemory", MP_PURPLE4);
     png_image image;
-    memset(&image, 0, sizeof(image));
+    std::memset(&image, 0, sizeof(image));
 
     image.width = width;
     image.height = height;
-    dataEnd = (BYTE *)pOutput + outputCapacity;
+    dataEnd = static_cast<BYTE *>(pOutput) + outputCapacity;
     image.version = PNG_IMAGE_VERSION;
     image.format = PNG_FORMAT_RGBA;
-    dataStart = (BYTE*)pOutput;
-    dataCurr = (BYTE*)pOutput;
+    dataStart = static_cast<BYTE *>(pOutput);
+    dataCurr = static_cast<BYTE *>(pOutput);
 
     png_image_write_to_stdio(&image, NULL, NULL, ppDataIn, NULL, NULL, user_write_data, user_flush_data);
 
-    *outputLength = (int)(dataCurr - dataStart);
+    *outputLength = static_cast<int>(dataCurr - dataStart);
     return S_OK;
 }
 
