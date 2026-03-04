@@ -347,8 +347,6 @@ public:
     class Context
     {
     public:
-        static const unsigned int VERTEX_BUFFER_SIZE = 0x100000;
-
         Context(ID3D11Device *device, ID3D11DeviceContext *deviceContext);
 
         ID3D11DeviceContext *m_pDeviceContext;

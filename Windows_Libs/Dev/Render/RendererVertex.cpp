@@ -30,6 +30,8 @@ D3D11_PRIMITIVE_TOPOLOGY Renderer::m_Topologies[C4JRender::PRIMITIVE_TYPE_COUNT]
     D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, D3D11_PRIMITIVE_TOPOLOGY_LINELIST,      D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP,
 };
 
+static const unsigned int kVertexBufferSize = 0x100000;
+
 void Renderer::DrawVertexBuffer(C4JRender::ePrimitiveType PrimitiveType, int count, ID3D11Buffer *buffer, C4JRender::eVertexType vType,
                                 C4JRender::ePixelShaderType psType)
 {
@@ -161,10 +163,10 @@ void Renderer::DrawVertices(C4JRender::ePrimitiveType PrimitiveType, int count, 
     const UINT stride = vertexStrideTable[vType];
     const UINT vertexBytes = stride * static_cast<UINT>(count);
 
-    assert(vertexBytes <= Context::VERTEX_BUFFER_SIZE);
+    assert(vertexBytes <= kVertexBufferSize);
 
     UINT vertexOffset = c.dynamicVertexOffset;
-    if (vertexOffset + vertexBytes > Context::VERTEX_BUFFER_SIZE)
+    if (vertexOffset + vertexBytes > kVertexBufferSize)
         vertexOffset = 0;
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};

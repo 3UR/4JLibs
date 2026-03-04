@@ -53,7 +53,7 @@ HRESULT Renderer::LoadTextureData(BYTE* pbData, DWORD dwBytes, D3DXIMAGE_INFO* p
 
     image.format = PNG_FORMAT_BGRA;
 
-    *ppDataOut = new int[(image.width * image.height * 4) >> 2];
+    *ppDataOut = new int[(image.height * image.width * 4) >> 2];
     if (!*ppDataOut || !png_image_finish_read(&image, NULL, *ppDataOut, NULL, NULL))
         return -1;
 
@@ -76,7 +76,7 @@ HRESULT Renderer::LoadTextureData(const char* szFilename, D3DXIMAGE_INFO* pSrcIn
 
     image.format = PNG_FORMAT_BGRA;
 
-    *ppDataOut = new int[(image.width * image.height * 4) >> 2];
+    *ppDataOut = new int[(image.height * image.width * 4) >> 2];
     if (!*ppDataOut || !png_image_finish_read(&image, NULL, *ppDataOut, NULL, NULL))
         return -1;
 
@@ -158,8 +158,8 @@ int Renderer::TextureCreate()
     {
         if (!m_textures[i].allocated)
         {
-            m_textures[i].texture = NULL;
             m_textures[i].allocated = true;
+            m_textures[i].texture = NULL;
             m_textures[i].mipLevels = 1;
             m_textures[i].samplerParams = 0;
             return i;
