@@ -26,14 +26,16 @@ SOFTWARE.
 #include "Renderer.h"
 #include "CompiledShaders.h"
 
-Renderer InternalRenderManager;
-
 DWORD Renderer::tlsIdx = TlsAlloc();
+
 _RTL_CRITICAL_SECTION Renderer::totalAllocCS = {};
+int Renderer::totalAlloc = 0;
 
 DWORD Renderer::s_auiWidths[]  = { 1920, 512, 256, 128, 64, 0 };
 DWORD Renderer::s_auiHeights[] = { 1080, 512, 256, 128, 64 };
-int Renderer::totalAlloc = 0;
+
+Renderer InternalRenderManager;
+
 const float Renderer::PI = 3.14159274f;
 
 D3D11_INPUT_ELEMENT_DESC g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1[] = {
@@ -55,6 +57,8 @@ static const unsigned int kScreenGrabHeight = 1080;
 static const unsigned int kThumbnailSize = 64;
 
 static const unsigned int g_vertexStrides[C4JRender::VERTEX_TYPE_COUNT] = { 32, 16, 32, 32 };
+
+ID3D11InputLayout **g_vertexInputLayout;
 
 Renderer::Context::Context(ID3D11Device* device, ID3D11DeviceContext* deviceContext)
     : m_pDeviceContext(deviceContext)
@@ -955,7 +959,7 @@ void Renderer::SetupShaders()
     vertexStrideTable = new unsigned int[C4JRender::VERTEX_TYPE_COUNT];
     for (UINT i = 0; i < C4JRender::VERTEX_TYPE_COUNT; ++i)
         vertexStrideTable[i] = g_vertexStrides[i];
-    inputLayoutTable = new ID3D11InputLayout *[C4JRender::VERTEX_TYPE_COUNT];
+    g_vertexInputLayout = new ID3D11InputLayout *[C4JRender::VERTEX_TYPE_COUNT];
     pixelShaderTable = new ID3D11PixelShader *[C4JRender::PIXEL_SHADER_COUNT];
 
     m_pDevice->CreateVertexShader(g_main_VS_PF3_TF2_CB4_NB4_XW1, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1), NULL, &vertexShaderTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1]);
@@ -971,10 +975,10 @@ void Renderer::SetupShaders()
     m_pDevice->CreatePixelShader(g_main_PS_ScreenSpace, sizeof(g_main_PS_ScreenSpace), NULL, &screenSpacePixelShader);
     m_pDevice->CreatePixelShader(g_main_PS_ScreenClear, sizeof(g_main_PS_ScreenClear), NULL, &screenClearPixelShader);
 
-    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1), &inputLayoutTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1]);
-    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_Compressed, 2, g_main_VS_Compressed, sizeof(g_main_VS_Compressed), &inputLayoutTable[C4JRender::VERTEX_TYPE_COMPRESSED]);
-    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1_LIGHTING, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1_LIGHTING), &inputLayoutTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT]);
-    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1_TEXGEN, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1_TEXGEN), &inputLayoutTable[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_TEXGEN]);
+    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1), &g_vertexInputLayout[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1]);
+    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_Compressed, 2, g_main_VS_Compressed, sizeof(g_main_VS_Compressed), &g_vertexInputLayout[C4JRender::VERTEX_TYPE_COMPRESSED]);
+    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1_LIGHTING, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1_LIGHTING), &g_vertexInputLayout[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_LIT]);
+    m_pDevice->CreateInputLayout(g_vertex_PTN_Elements_PF3_TF2_CB4_NB4_XW1, 5, g_main_VS_PF3_TF2_CB4_NB4_XW1_TEXGEN, sizeof(g_main_VS_PF3_TF2_CB4_NB4_XW1_TEXGEN), &g_vertexInputLayout[C4JRender::VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_TEXGEN]);
 }
 
 void Renderer::StartFrame()

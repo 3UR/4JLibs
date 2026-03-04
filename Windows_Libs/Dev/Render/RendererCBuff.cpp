@@ -177,7 +177,7 @@ bool Renderer::CBuffCall(int index, bool full)
             if (vertexType != activeVertexType)
             {
                 c.m_pDeviceContext->VSSetShader(vertexShaderTable[vertexType], NULL, 0);
-                c.m_pDeviceContext->IASetInputLayout(inputLayoutTable[vertexType]);
+                c.m_pDeviceContext->IASetInputLayout(g_vertexInputLayout[vertexType]);
                 activeVertexType = vertexType;
             }
 
@@ -588,7 +588,7 @@ void Renderer::CommandBuffer::Render(C4JRender::eVertexType vType, Renderer::Con
                 if (static_cast<DWORD>(drawVertexType) != InternalRenderManager.activeVertexType)
                 {
                     c.m_pDeviceContext->VSSetShader(InternalRenderManager.vertexShaderTable[shaderVertexType], NULL, 0);
-                    c.m_pDeviceContext->IASetInputLayout(InternalRenderManager.inputLayoutTable[shaderVertexType]);
+                    c.m_pDeviceContext->IASetInputLayout(g_vertexInputLayout[shaderVertexType]);
                     InternalRenderManager.activeVertexType = drawVertexType;
                 }
             }

@@ -69,7 +69,7 @@ void Renderer::DrawVertexSetup(C4JRender::eVertexType vType, C4JRender::ePixelSh
     if (effectiveVertexType != activeVertexType)
     {
         d3d11->VSSetShader(vertexShaderTable[effectiveVertexType], NULL, 0);
-        d3d11->IASetInputLayout(inputLayoutTable[effectiveVertexType]);
+        d3d11->IASetInputLayout(g_vertexInputLayout[effectiveVertexType]);
         activeVertexType = effectiveVertexType;
     }
 
