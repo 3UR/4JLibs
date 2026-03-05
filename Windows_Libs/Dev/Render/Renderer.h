@@ -308,7 +308,6 @@ public:
         struct Command
         {
             Renderer::eCommandType m_command_type;
-            BYTE commandPadding[12];
 
             union
             {
@@ -364,7 +363,6 @@ public:
                 struct
                 {
                     int m_light_index;
-                    float padding[3];
                     float m_direction[4];
                 } set_light_direction;
 
@@ -376,7 +374,6 @@ public:
 
                 struct
                 {
-                    BYTE padding;
                     float m_color[3];
                 } set_light_ambient_colour;
 
@@ -461,7 +458,6 @@ public:
         bool lightEnabled[2];
         bool lightingDirty;
         DWORD forcedLOD;
-        BYTE paddingAfterForceLOD[4];
         DirectX::XMFLOAT4 lightDirection[2];
         DirectX::XMFLOAT4 lightColour[2];
         DirectX::XMFLOAT4 lightAmbientColour;
@@ -575,9 +571,6 @@ public:
 
     bool m_bShouldScreenGrabNextFrame;
     bool m_bSuspended;
-
-    // @Patoke add
-    ID3D11Texture2D *m_backBufferTexture;
 };
 
 extern ID3D11InputLayout **g_vertexInputLayout;

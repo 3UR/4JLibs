@@ -262,14 +262,6 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
 {
     Renderer::Context &c = getContext();
 
-    // @Patoke fix: bind render target to a proper backbuffer texture
-    ID3D11Resource *actualBackBuffer = NULL;
-    renderTargetView->GetResource(&actualBackBuffer);
-
-    // copy the backbuffer contents
-    c.m_pDeviceContext->CopyResource(m_backBufferTexture, actualBackBuffer);
-    actualBackBuffer->Release();
-
     float left;
     float bottom;
     float right;
@@ -338,25 +330,25 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     float aspectRatio = IsWidescreen() ? (16.0f / 9.0f) : (4.0f / 3.0f);
 
     right *= aspectRatio;
-    left *= aspectRatio;
+    left  *= aspectRatio;
 
-    float width = right - left;
+    float width  = right - left;
     float height = top - bottom;
 
     if (height > width)
     {
         float diff = (height - width) * 0.5f;
         bottom += diff;
-        top -= diff;
+        top    -= diff;
     }
     else
     {
         float diff = (width - height) * 0.5f;
-        left += diff;
+        left  += diff;
         right -= diff;
     }
 
-    left /= aspectRatio;
+    left  /= aspectRatio;
     right /= aspectRatio;
 
     ID3D11BlendState *blendState = NULL;
@@ -393,14 +385,9 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     D3D11_RASTERIZER_DESC rasterDesc = {};
     rasterDesc.FillMode = D3D11_FILL_SOLID;
     rasterDesc.CullMode = D3D11_CULL_NONE;
-    rasterDesc.FrontCounterClockwise = true;
-    rasterDesc.DepthBias = 0;
-    rasterDesc.DepthBiasClamp = 0.f;
-    rasterDesc.SlopeScaledDepthBias = 0.f;
     rasterDesc.DepthClipEnable = true;
-    rasterDesc.ScissorEnable = false;
-    rasterDesc.MultisampleEnable = false;
-    rasterDesc.AntialiasedLineEnable = false;
+    rasterDesc.MultisampleEnable = true;
+    m_pDevice->CreateRasterizerState(&rasterDesc, &rasterizerState);
 
     D3D11_SAMPLER_DESC samplerDesc = {};
     samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -422,10 +409,7 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
     blendState->Release();
     depthState->Release();
     rasterizerState->Release();
-
-    // @Patoke add: just to make sure, set the render target shader resource to null to avoid any potential read/write hazards
-    ID3D11ShaderResourceView *nullSRV[1] = {NULL};
-    c.m_pDeviceContext->PSSetShaderResources(0, 1, nullSRV);
+    c.m_pDeviceContext->PSSetShaderResources(0, 0, NULL);
 
     for (UINT i = 0; i < MAX_MIP_LEVELS - 1; ++i)
     {
@@ -436,8 +420,6 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
         viewport.Height = (float)s_auiHeights[i + 1];
         viewport.MinDepth = 0.0f;
         viewport.MaxDepth = 1.0f;
-
-        c.m_pDeviceContext->PSSetShaderResources(0, 1, nullSRV);
 
         c.m_pDeviceContext->OMSetRenderTargets(1, &renderTargetViews[i], NULL);
         c.m_pDeviceContext->RSSetViewports(1, &viewport);
@@ -450,31 +432,23 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
         D3D11_MAPPED_SUBRESOURCE mapped = {};
         c.m_pDeviceContext->Map(c.m_thumbnailBoundsBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 
-        float *constants = static_cast<float *>(mapped.pData);
-        // @Patoke fix: the shader code zooms by 2x every iteration, so we keep zooming in over and over again if we use 1.0f, so we adjust by
-        // doing 2.0f like a boss
+        float* constants = static_cast<float*>(mapped.pData);
         if (i == 0)
         {
             constants[0] = left;
             constants[1] = bottom;
-            constants[2] = (right - left) * 2.0f;
-            constants[3] = (top - bottom) * 2.0f;
+            constants[2] = right - left;
+            constants[3] = top - bottom;
         }
         else
         {
             constants[0] = 0.0f;
             constants[1] = 0.0f;
-            constants[2] = 2.0f;
-            constants[3] = 2.0f;
+            constants[2] = 1.0f;
+            constants[3] = 1.0f;
         }
 
         c.m_pDeviceContext->Unmap(c.m_thumbnailBoundsBuffer, 0);
-
-        // @Patoke fix: the shader expects the bounds buffer to be at slot 9 for vertex shader and slot 0 for pixel shader, so we need to set it there
-        // instead of the usual slot 0
-        c.m_pDeviceContext->VSSetConstantBuffers(9, 1, &c.m_thumbnailBoundsBuffer);
-        c.m_pDeviceContext->PSSetConstantBuffers(0, 1, &c.m_thumbnailBoundsBuffer);
-
         c.m_pDeviceContext->Draw(4, 0);
     }
 
@@ -494,21 +468,26 @@ void Renderer::CaptureThumbnail(ImageFileBuffer *pngOut)
         c.m_pDeviceContext->CopyResource(stagingTexture, renderTargetTextures[MAX_MIP_LEVELS - 2]);
 
         D3D11_MAPPED_SUBRESOURCE mapped = {};
-        if (SUCCEEDED(c.m_pDeviceContext->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped)))
-        {
-            for (UINT y = 0; y < kThumbnailSize; ++y)
-            {
-                unsigned char *dstRow = linearData + (y * stride);
-                const unsigned char *srcRow = reinterpret_cast<const unsigned char *>(mapped.pData) + (y * mapped.RowPitch);
+        c.m_pDeviceContext->Map(stagingTexture, 0, D3D11_MAP_READ_WRITE, 0, &mapped);
+        const unsigned char* src = static_cast<const unsigned char*>(mapped.pData);
+        unsigned char* dst = linearData;
 
-                std::memcpy(dstRow, srcRow, stride);
-                for (UINT x = 0; x < kThumbnailSize; ++x)
-                {
-                    dstRow[(x * 4) + 3] = 0xFF;
-                }
+        for (UINT y = 0; y < kThumbnailSize; ++y)
+        {
+            std::memcpy(dst, src, stride);
+
+            unsigned char* alpha = dst + 3;
+            for (UINT x = 0; x < kThumbnailSize; ++x)
+            {
+                *alpha = 0xFF;
+                alpha += 4;
             }
-            c.m_pDeviceContext->Unmap(stagingTexture, 0);
+
+            src += mapped.RowPitch;
+            dst += stride;
         }
+
+        c.m_pDeviceContext->Unmap(stagingTexture, 0);
     }
 
     ConvertLinearToPng(pngOut, linearData, kThumbnailSize, kThumbnailSize);
@@ -728,24 +707,10 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain)
     backBufferTexture->GetDesc(&backDesc);
     backBufferWidth = backDesc.Width;
     backBufferHeight = backDesc.Height;
+    renderTargetTextures[0] = backBufferTexture;
 
-    // @Patoke fix: we can't bind the backbuffer directly as a shader resource, so we create a new texture with the same dimensions and format and
-    // copy the backbuffer contents to it, then we can bind that texture as a shader resource for the thumbnail generation
-    D3D11_TEXTURE2D_DESC safeDesc = backDesc;
-    safeDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    safeDesc.Usage = D3D11_USAGE_DEFAULT;
-    safeDesc.SampleDesc.Count = 1; // no MSAA
-    safeDesc.SampleDesc.Quality = 0;
-
-    m_pDevice->CreateTexture2D(&safeDesc, NULL, &m_backBufferTexture);
-
-    m_pDevice->CreateShaderResourceView(m_backBufferTexture, NULL, &renderTargetShaderResourceView);
-
-    renderTargetTextures[0] = m_backBufferTexture;
-
-    //m_pDevice->CreateRenderTargetView(backBufferTexture, &rtvDesc, &renderTargetView);
-
-    backBufferTexture->Release();
+    m_pDevice->CreateRenderTargetView(backBufferTexture, &rtvDesc, &renderTargetView);
+    m_pDevice->CreateShaderResourceView(backBufferTexture, &srvDesc, &renderTargetShaderResourceView);
     backBufferResource->Release();
 
     D3D11_TEXTURE2D_DESC desc = {};
@@ -765,10 +730,9 @@ void Renderer::Initialise(ID3D11Device *pDevice, IDXGISwapChain *pSwapChain)
         desc.Width = s_auiWidths[i + 1];
         desc.Height = s_auiHeights[i + 1];
 
-        // @Patoke fix: before these would fail and our views would be nullptrs
         m_pDevice->CreateTexture2D(&desc, NULL, &renderTargetTextures[i]);
-        m_pDevice->CreateRenderTargetView(renderTargetTextures[i], NULL, &renderTargetViews[i]);
-        m_pDevice->CreateShaderResourceView(renderTargetTextures[i], NULL, &renderTargetShaderResourceViews[i]);
+        m_pDevice->CreateRenderTargetView(renderTargetTextures[i], &rtvDesc, &renderTargetViews[i]);
+        m_pDevice->CreateShaderResourceView(renderTargetTextures[i], &srvDesc, &renderTargetShaderResourceViews[i]);
     }
 
     std::memset(m_textures, 0, sizeof(m_textures));
@@ -1040,4 +1004,3 @@ Renderer::Context &Renderer::getContext()
 {
     return *reinterpret_cast<Renderer::Context*>(TlsGetValue(Renderer::tlsIdx));
 }
-
